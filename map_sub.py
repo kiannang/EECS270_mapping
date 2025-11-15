@@ -13,7 +13,7 @@ class MapSubscriber(Node):
         )
 
     def listener_callback(self, msg):
-        self.get_logger().info(f'I heard: {msg.data}')
+        self.get_logger().info(f"Received: {msg.data}")
 
 def main(args=None):
     rclpy.init(args=args)
