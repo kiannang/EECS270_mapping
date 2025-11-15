@@ -52,6 +52,9 @@ class AprilTagPublisher(Node):
             msg.data = "No tag detected"
             self.publisher_.publish(msg)
             self.get_logger().info(msg.data)
+
+            cv2.imshow("AprilTag View", frame)
+            cv2.waitKey(1)
             return
 
         for r in results:
@@ -68,6 +71,30 @@ class AprilTagPublisher(Node):
             # publish
             self.publisher_.publish(msg)
             self.get_logger().info(f"Published: {msg_text}")
+
+            # ----- Draw the detection on the frame -----
+            corners = r.corners.astype(int)
+            for i in range(4):
+                pt1 = tuple(corners[i])
+                pt2 = tuple(corners[(i + 1) % 4])
+                cv2.line(frame, pt1, pt2, (0, 255, 0), 2)
+
+            center = (int(r.center[0]), int(r.center[1]))
+            cv2.circle(frame, center, 4, (0, 0, 255), -1)
+
+            cv2.putText(
+                frame,
+                f"ID {tag_id}",
+                (center[0] + 10, center[1] - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 0, 0),
+                2
+            )
+
+        # Show camera feed with detections
+        cv2.imshow("AprilTag View", frame)
+        cv2.waitKey(1)
 
     def destroy_node(self):
         self.cap.release()
