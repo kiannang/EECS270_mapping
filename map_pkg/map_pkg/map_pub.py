@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
-from geometry_msgs.msg import Pose2D
+from geometry_msgs.msg import PoseStamped
 
 import cv2
 import numpy as np
@@ -13,8 +13,8 @@ class AprilTagPublisher(Node):
     def __init__(self):
         super().__init__('map_pub')
 
-        # Pose2D publisher
-        self.pose2d_pub = self.create_publisher(Pose2D, 'map_topic', 10)
+        # PoseStamped publisher
+        self.pose_pub = self.create_publisher(PoseStamped, 'map_topic', 10)
 
         # Subscriptions
         self.image_sub = self.create_subscription(
@@ -70,20 +70,35 @@ class AprilTagPublisher(Node):
 
             # Extract coordinates in camera frame
             tx = float(t[0][0])   # left-right
+            ty = float(t[1][0])   # up-down
             tz = float(t[2][0])   # forward
-            angle = float(np.degrees(np.arctan2(tx, tz)))
 
-            # Build Pose2D
-            pose = Pose2D()
-            pose.x = tx
-            pose.y = tz
-            pose.theta = angle
+            # horizontal yaw only
+            yaw = float(np.degrees(np.arctan2(tx, tz)))
 
-            # Publish Pose2D
-            self.pose2d_pub.publish(pose)
+            # Build PoseStamped
+            pose_msg = PoseStamped()
+            pose_msg.header.stamp = self.get_clock().now().to_msg()
+            pose_msg.header.frame_id = "camera_frame"
 
-            # Console output only (NOT published)
-            print(f"ID:{r.tag_id}  X:{tx:.2f}  Y:{tz:.2f}  Theta:{angle:.1f}")
+            pose_msg.pose.position.x = tx
+            pose_msg.pose.position.y = ty
+            pose_msg.pose.position.z = tz
+
+            # Orientation: yaw only → convert to quaternion
+            cyaw = np.cos(np.deg2rad(yaw) / 2.0)
+            syaw = np.sin(np.deg2rad(yaw) / 2.0)
+
+            pose_msg.pose.orientation.x = 0.0
+            pose_msg.pose.orientation.y = 0.0
+            pose_msg.pose.orientation.z = syaw
+            pose_msg.pose.orientation.w = cyaw
+
+            # Publish PoseStamped
+            self.pose_pub.publish(pose_msg)
+
+            # Console debug only
+            print(f"ID:{r.tag_id}  X:{tx:.2f}  Y:{ty:.2f}  Z:{tz:.2f}  Yaw:{yaw:.1f}")
 
 
 def main(args=None):
