@@ -15,7 +15,7 @@ class AprilTagPublisher(Node):
         self.publisher_ = self.create_publisher(String, 'map_topic', 10)
 
         # Camera init
-        self.cap = cv2.VideoCapture(9)
+        self.cap = cv2.VideoCapture(2)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
