@@ -31,13 +31,13 @@ class AprilTagPublisher(Node):
 
         self.bridge = CvBridge()
 
-        self.camera_params = None   # fx, fy, cx, cy (filled later)
+        self.camera_params = None   # fx, fy, cx, cy
         self.tag_size = 0.1         # meters
         self.detector = Detector(families='tag36h11')
 
     def camera_info_callback(self, msg: CameraInfo):
         """ Extract fx, fy, cx, cy from camera_info """
-        k = msg.k  # 3x3 camera matrix
+        k = msg.k
         fx = k[0]
         fy = k[4]
         cx = k[2]
@@ -66,23 +66,23 @@ class AprilTagPublisher(Node):
             return
 
         for r in results:
-            t = r.pose_t  # translation vector (3x1)
+            t = r.pose_t
 
-            # Extract 3D camera-frame values
-            tx = float(t[0][0])   # left/right
+            # Extract coordinates in camera frame
+            tx = float(t[0][0])   # left-right
             tz = float(t[2][0])   # forward
-            angle = float(np.degrees(np.arctan2(tx, tz)))  # yaw angle
+            angle = float(np.degrees(np.arctan2(tx, tz)))
 
             # Build Pose2D
-            pose2d = Pose2D()
-            pose2d.x = tx
-            pose2d.y = tz
-            pose2d.theta = angle
+            pose = Pose2D()
+            pose.x = tx
+            pose.y = tz
+            pose.theta = angle
 
             # Publish Pose2D
-            self.pose2d_pub.publish(pose2d)
+            self.pose2d_pub.publish(pose)
 
-            # Console print only
+            # Console output only (NOT published)
             print(f"ID:{r.tag_id}  X:{tx:.2f}  Y:{tz:.2f}  Theta:{angle:.1f}")
 
 
