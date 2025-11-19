@@ -26,7 +26,7 @@ class AprilTagPublisher(Node):
         # AprilTag detector
         self.detector = Detector(families='tag36h11')
 
-        self.camera_params = [600, 600, 640, 360]  # fx, fy, cx, cy
+        self.camera_params = [604.4553, 604.4725, 329.0478, 241.1915]  # fx, fy, cx, cy
         self.tag_size = 0.1  # meters
 
         # Timer runs at 10 Hz
