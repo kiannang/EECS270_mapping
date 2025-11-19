@@ -32,11 +32,12 @@ class AprilTagPublisher(Node):
         self.bridge = CvBridge()
 
         self.camera_params = None   # fx, fy, cx, cy
+        self.camera_frame = None    # frame_id from camera_info
         self.tag_size = 0.1         # meters
         self.detector = Detector(families='tag36h11')
 
     def camera_info_callback(self, msg: CameraInfo):
-        """ Extract fx, fy, cx, cy from camera_info """
+        """ Extract fx, fy, cx, cy, and store frame_id """
         k = msg.k
         fx = k[0]
         fy = k[4]
@@ -44,10 +45,11 @@ class AprilTagPublisher(Node):
         cy = k[5]
 
         self.camera_params = [fx, fy, cx, cy]
+        self.camera_frame = msg.header.frame_id  # <<< store frame id
 
     def image_callback(self, msg: Image):
         """ Convert image and run AprilTag when ready """
-        if self.camera_params is None:
+        if self.camera_params is None or self.camera_frame is None:
             self.get_logger().warn("Waiting for camera_info...")
             return
 
@@ -67,25 +69,23 @@ class AprilTagPublisher(Node):
 
         for r in results:
             t = r.pose_t
-
-            # Extract coordinates in camera frame
             tx = float(t[0][0])   # left-right
             ty = float(t[1][0])   # up-down
             tz = float(t[2][0])   # forward
 
-            # horizontal yaw only
+            # yaw angle
             yaw = float(np.degrees(np.arctan2(tx, tz)))
 
             # Build PoseStamped
             pose_msg = PoseStamped()
             pose_msg.header.stamp = self.get_clock().now().to_msg()
-            pose_msg.header.frame_id = "camera_frame"
+            pose_msg.header.frame_id = self.camera_frame  # <<< use camera frame
 
             pose_msg.pose.position.x = tx
             pose_msg.pose.position.y = ty
             pose_msg.pose.position.z = tz
 
-            # Orientation: yaw only → convert to quaternion
+            # quaternion from yaw
             cyaw = np.cos(np.deg2rad(yaw) / 2.0)
             syaw = np.sin(np.deg2rad(yaw) / 2.0)
 
