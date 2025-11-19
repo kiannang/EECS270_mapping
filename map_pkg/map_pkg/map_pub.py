@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
-from std_msgs.msg import String
+from geometry_msgs.msg import Pose2D
 
 import cv2
 import numpy as np
@@ -13,7 +13,8 @@ class AprilTagPublisher(Node):
     def __init__(self):
         super().__init__('map_pub')
 
-        self.publisher_ = self.create_publisher(String, 'map_topic', 10)
+        # Pose2D publisher
+        self.pose2d_pub = self.create_publisher(Pose2D, 'map_topic', 10)
 
         # Subscriptions
         self.image_sub = self.create_subscription(
@@ -33,8 +34,6 @@ class AprilTagPublisher(Node):
         self.camera_params = None   # fx, fy, cx, cy (filled later)
         self.tag_size = 0.1         # meters
         self.detector = Detector(families='tag36h11')
-
-        self.latest_image = None
 
     def camera_info_callback(self, msg: CameraInfo):
         """ Extract fx, fy, cx, cy from camera_info """
@@ -63,20 +62,28 @@ class AprilTagPublisher(Node):
         )
 
         if len(results) == 0:
-            out = "No tag detected"
-            self.publisher_.publish(String(data=out))
-            self.get_logger().info(out)
+            print("No tag detected")
             return
 
         for r in results:
-            t = r.pose_t  # translation vector
-            distance = float(np.linalg.norm(t))
-            angle = float(np.degrees(np.arctan2(t[0][0], t[2][0])))
+            t = r.pose_t  # translation vector (3x1)
 
-            msg_text = f"ID:{r.tag_id} Distance:{distance:.2f} Angle:{angle:.1f}"
+            # Extract 3D camera-frame values
+            tx = float(t[0][0])   # left/right
+            tz = float(t[2][0])   # forward
+            angle = float(np.degrees(np.arctan2(tx, tz)))  # yaw angle
 
-            self.publisher_.publish(String(data=msg_text))
-            self.get_logger().info(f"Published: {msg_text}")
+            # Build Pose2D
+            pose2d = Pose2D()
+            pose2d.x = tx
+            pose2d.y = tz
+            pose2d.theta = angle
+
+            # Publish Pose2D
+            self.pose2d_pub.publish(pose2d)
+
+            # Console print only
+            print(f"ID:{r.tag_id}  X:{tx:.2f}  Y:{tz:.2f}  Theta:{angle:.1f}")
 
 
 def main(args=None):
