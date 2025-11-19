@@ -1,9 +1,11 @@
 import rclpy
 from rclpy.node import Node
+from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import String
 
 import cv2
 import numpy as np
+from cv_bridge import CvBridge
 from pupil_apriltags import Detector
 
 
@@ -11,33 +13,46 @@ class AprilTagPublisher(Node):
     def __init__(self):
         super().__init__('map_pub')
 
-        # ROS publisher
         self.publisher_ = self.create_publisher(String, 'map_topic', 10)
 
-        # Camera init
-        self.cap = cv2.VideoCapture(2)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        # Subscriptions
+        self.image_sub = self.create_subscription(
+            Image,
+            '/camera/camera/color/image_raw',
+            self.image_callback,
+            10)
 
-        if not self.cap.isOpened():
-            self.get_logger().error("Cannot open camera")
-            exit()
+        self.caminfo_sub = self.create_subscription(
+            CameraInfo,
+            '/camera/camera/color/camera_info',
+            self.camera_info_callback,
+            10)
 
-        # AprilTag detector
+        self.bridge = CvBridge()
+
+        self.camera_params = None   # fx, fy, cx, cy (filled later)
+        self.tag_size = 0.1         # meters
         self.detector = Detector(families='tag36h11')
 
-        self.camera_params = [604.4553, 604.4725, 329.0478, 241.1915]  # fx, fy, cx, cy
-        self.tag_size = 0.1  # meters
+        self.latest_image = None
 
-        # Timer runs at 10 Hz
-        self.timer = self.create_timer(0.1, self.detect_tags)
+    def camera_info_callback(self, msg: CameraInfo):
+        """ Extract fx, fy, cx, cy from camera_info """
+        k = msg.k  # 3x3 camera matrix
+        fx = k[0]
+        fy = k[4]
+        cx = k[2]
+        cy = k[5]
 
-    def detect_tags(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            self.get_logger().warning("Failed to grab frame")
+        self.camera_params = [fx, fy, cx, cy]
+
+    def image_callback(self, msg: Image):
+        """ Convert image and run AprilTag when ready """
+        if self.camera_params is None:
+            self.get_logger().warn("Waiting for camera_info...")
             return
 
+        frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         results = self.detector.detect(
@@ -48,31 +63,20 @@ class AprilTagPublisher(Node):
         )
 
         if len(results) == 0:
-            msg = String()
-            msg.data = "No tag detected"
-            self.publisher_.publish(msg)
-            self.get_logger().info(msg.data)
+            out = "No tag detected"
+            self.publisher_.publish(String(data=out))
+            self.get_logger().info(out)
             return
 
         for r in results:
-            tag_id = r.tag_id
             t = r.pose_t  # translation vector
             distance = float(np.linalg.norm(t))
             angle = float(np.degrees(np.arctan2(t[0][0], t[2][0])))
 
-            msg_text = f"ID:{tag_id} Distance:{distance:.2f} Angle:{angle:.1f}"
+            msg_text = f"ID:{r.tag_id} Distance:{distance:.2f} Angle:{angle:.1f}"
 
-            msg = String()
-            msg.data = msg_text
-
-            # publish
-            self.publisher_.publish(msg)
+            self.publisher_.publish(String(data=msg_text))
             self.get_logger().info(f"Published: {msg_text}")
-
-    def destroy_node(self):
-        self.cap.release()
-        cv2.destroyAllWindows()
-        super().destroy_node()
 
 
 def main(args=None):
